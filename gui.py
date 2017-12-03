@@ -495,7 +495,7 @@ def item_chosen(choice):
             history_title = 'Account History (' + account_block_count + ')'
             top = Toplevel()
             top.title(history_title)
-            master = Tkinter.Frame(top)
+            master = tkinter.Frame(top)
             master.pack()
             tree = ttk.Treeview(master, columns=['Transaction Type','Account','Amount'])
             tree.pack()
