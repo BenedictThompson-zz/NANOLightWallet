@@ -12,18 +12,20 @@ import threading
 import tkinter
 import websocket
 import json
-import sys, os, logging
+import sys, os
 from websocket import create_connection
+import ssl
+import websocket
 from tkinter import *
 import tkinter.simpledialog as simpledialog
 import tkinter.messagebox as messagebox
 from tkinter import ttk
 root=Tk()
+root.withdraw()
 
 root.minsize(width=600, height=300)
 root.wm_iconbitmap('logo.ico')
 root.title('XRB Lite Wallet')
-root.withdraw()
 def root_destroy():
     root.destroy()
     
@@ -44,7 +46,6 @@ default_representative = \
 raw_in_xrb = 1000000000000000000000000000000.0
 choices = u'Send,Account History,Display QR Code,,Configure PoW,Configure Rep,Configure Server,,Refresh,Quit'.split(',')
 running_pow_gen = False
-logging.basicConfig(filename="sample.log", level=logging.INFO)
 class StringDialog(simpledialog._QueryString):
     def body(self, master):
         super().body(master)
@@ -289,7 +290,6 @@ def send_xrb(dest_address, final_balance):
     ws.send(data)
 
     block_reply = ws.recv()
-    logging.info(block_reply)
     #print(block_reply)
     return block_reply
 
@@ -330,7 +330,6 @@ def receive_xrb():
             ws.send(data)
 
             block_reply = ws.recv()
-            logging.info(block_reply)
             save_config('balance', str(get_balance(account)))
             #print(block_reply)
     else:
@@ -338,7 +337,6 @@ def receive_xrb():
             previous = get_previous()
             work = get_pow(previous, 'cache')
             save_config('cached_pow', work)
-            logging.info("Cached PoW Block")
     time.sleep(50)
 
 def open_xrb():
@@ -378,7 +376,6 @@ def open_xrb():
     ws.send(data)
 
     block_reply = ws.recv()
-    logging.info(block_reply)
 
     save_config('open', '1')
     #print(block_reply)
@@ -408,7 +405,6 @@ def change_xrb():
     ws.send(data)
 
     block_reply = ws.recv()
-    logging.info(block_reply)
 #print(block_reply)
 
 def item_chosen(choice):
@@ -417,7 +413,7 @@ def item_chosen(choice):
         global saved_balance
         save_config('balance', str(get_balance(account)))
         saved_balance = str(get_balance(account))
-        balance_text.set(('Balance: {} Mxrb').format(int(saved_balance)))
+        balance_text.set(('Balance: {} Mxrb').format(int(float(saved_balance))))
         root.update_idletasks()
 
     elif choice == 'Send':
@@ -498,6 +494,9 @@ def item_chosen(choice):
             master = tkinter.Frame(top)
             master.pack()
             tree = ttk.Treeview(master, columns=['Transaction Type','Account','Amount'])
+            tree.heading('Transaction Type', text='Transaction Type')
+            tree.heading('Account', text='Account')
+            tree.heading('Amount', text='Amount')
             tree.pack()
         else:
             account_block_count = rx_data['block_count']
@@ -594,8 +593,14 @@ def process_send(final_address, final_balance):
        messagebox.showerror('Failed', 'Transaction Failed')
        top.destroy()
 
-        
+class StringDialog(simpledialog._QueryString):
+    def body(self, master):
+        super().body(master)
+        self.iconbitmap('logo.ico')
 
+def ask_string(title, prompt, **kargs):
+    d = StringDialog(title, prompt, **kargs)
+    return d.result
 
 def read_encrypted(password, filename, string=True):
     with open(filename, 'rb') as input:
@@ -614,12 +619,17 @@ def write_encrypted(password, filename, plaintext):
 parser = SafeConfigParser()
 config_files = parser.read('config.ini')
 
+
 while True:
-    password = simpledialog.askstring("Password", "Enter password:", show='*')
-    password_confirm = simpledialog.askstring("Password", "Confirm password:", show='*')
+    password = ask_string("Password", "Enter password:", show='*')
+    password_confirm = ask_string("Password", "Confirm password:", show='*')
+    if password == None or password == '':
+        sys.exit()
     if password == password_confirm:
         break
+    
     messagebox.showerror('Error', 'Password Mismatch')
+
 
 if len(config_files) == 0:
     full_wallet_seed = hex(random.SystemRandom().getrandbits(256))
@@ -632,14 +642,15 @@ if len(config_files) == 0:
     public_key = str(binascii.hexlify(pub_key), 'ascii')
 
     account = account_xrb(str(public_key))
-    keys = open('data.txt', 'w')
-    keys.write(('Wallet Seed: {}\nPublic Key: {}\n Account Address: {}\n').format(wallet_seed, public_key, account))
-    keys.write('\n Store the data in a safe place (for example on paper) and DELETE THIS FILE!')
-    messagebox.showinfo('Info','Seed and Address written to "data.txt", store the data in a safe place and delete this file')
+    with open('data.txt', 'w') as f:
+        f.write(('Wallet Seed: {}\nPublic Key: {}\nAccount Address: {}\n').format(wallet_seed, public_key, account))
+        f.write('\nStore the data in a safe place (for example on paper) and DELETE THIS FILE!')
+        f.close()
+    messagebox.showinfo('Info','Seed and Address written to "data.txt", ensure that you store your data in a safe place and delete this file.')
     parser.set('wallet', 'account', account)
     parser.set('wallet', 'index', '0')
     parser.set('wallet', 'representative', default_representative)
-    parser.set('wallet', 'pow_source', 'internal')
+    parser.set('wallet', 'pow_source', 'external')
     parser.set('wallet', 'server', 'wss://yapraiwallet.space')
     parser.set('wallet', 'cached_pow', '')
     parser.set('wallet', 'balance', '0')
@@ -647,7 +658,6 @@ if len(config_files) == 0:
 
     parser.write(cfgfile)
     cfgfile.close()
-
     index = 0
     seed = wallet_seed
 else:
@@ -668,8 +678,9 @@ account_open = parser.get('wallet', 'open')
 
 try:
     ws = create_connection(node_server)
-except:
-    messagebox.showerror('Error', ' to connect to backend server\nTry again later or change the server in config.ini')
+except Exception as e:
+    print (e)
+    messagebox.showerror('Error', ' Failed to connect to backend server\nTry again later or change the server in config.ini')
     sys.exit()
 
 
@@ -677,7 +688,7 @@ thread = threading.Thread(target=receive_xrb)
 thread.start()
 root.deiconify()
 balance_text = StringVar()
-balance_text.set(('Balance: {} Mxrb').format(int(saved_balance)))
+balance_text.set(('Balance: {} Mxrb').format(int(float(saved_balance))))
 l_title = Label(root, text="RetroXRBWallet")
 l_address = Text(root,height=1, width=65)
 l_address.insert(1.0, account)
