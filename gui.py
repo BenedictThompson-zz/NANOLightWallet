@@ -22,7 +22,7 @@ root.withdraw()
 
 root.minsize(width=600, height=300)
 root.wm_iconbitmap('logo.ico')
-root.title('XRB Lite Wallet')
+root.title('XRB Light Wallet')
 def root_destroy():
     root.destroy()
     
