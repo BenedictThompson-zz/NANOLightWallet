@@ -1,0 +1,7 @@
+urwid
+websocket-client
+pyblake2
+bitstring
+simple-crypt
+configparser
+pyqrcode
