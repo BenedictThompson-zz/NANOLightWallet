@@ -620,7 +620,7 @@ config_files = parser.read('config.ini')
 while True:
     password = ask_string("Password", "Enter password:", show='*')
     password_confirm = ask_string("Password", "Confirm password:", show='*')
-    if password == None or password == '':
+    if password == None or (password == '' and password_confirm == ''):
         sys.exit()
     if password == password_confirm:
         break
@@ -713,4 +713,3 @@ for c in sorted(root.children):
 l_address.configure(state="disabled",exportselection=1)
 
 root.mainloop()
-
