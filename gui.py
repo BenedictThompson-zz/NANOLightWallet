@@ -2,16 +2,37 @@
 #Previous - could reduce server involvement by storing previous hash, requesting server on boot + updating with each transaction
 #Convert PoW to cpython or even a c binary that could be dropped in to increase speed (would also benefit from multicore support)
 #Increase timeout on server
+datas=[('C:\\Python27\\tcl\\tcl8.5', 'lib\\tcl8.5'),
+             ('C:\\Python27\\tcl\\tk8.5', 'lib\\tk8.5')]
 
-import urwid
+
+from pyblake2 import blake2b
+import time
+import threading
+import tkinter
 import websocket
 import json
 import sys, os, logging
 from websocket import create_connection
+from tkinter import *
+import tkinter.simpledialog as simpledialog
+import tkinter.messagebox as messagebox
+from tkinter import ttk
+root=Tk()
+
+root.minsize(width=600, height=300)
+root.wm_iconbitmap('logo.ico')
+root.title('XRB Lite Wallet')
+root.withdraw()
+def root_destroy():
+    root.destroy()
+    
+def address_to_clipboard(self=1):
+    root.clipboard_clear()
+    root.clipboard_append(account)
 
 import binascii
 import random, getpass
-from pyblake2 import blake2b
 from bitstring import BitArray
 from pure25519 import ed25519_oop as ed25519
 from simplecrypt import encrypt, decrypt
@@ -22,8 +43,16 @@ default_representative = \
         'xrb_16k5pimotz9zehjk795wa4qcx54mtusk8hc5mdsjgy57gnhbj3hj6zaib4ic'
 raw_in_xrb = 1000000000000000000000000000000.0
 choices = u'Send,Account History,Display QR Code,,Configure PoW,Configure Rep,Configure Server,,Refresh,Quit'.split(',')
-
+running_pow_gen = False
 logging.basicConfig(filename="sample.log", level=logging.INFO)
+class StringDialog(simpledialog._QueryString):
+    def body(self, master):
+        super().body(master)
+        self.iconbitmap('logo.ico')
+
+    def ask_string(title, prompt, **kargs):
+        d = StringDialog(title, prompt, **kargs)
+        return d.result
 
 def xrb_account(address):
     # Given a string containing an XRB address, confirm validity and
@@ -125,24 +154,24 @@ def seed_account(seed, index):
     return account_key.bytes, private_public(account_key.bytes)
 
 def get_pow(hash, type):
-
+    global running_pow_gen
     cached_work = parser.get('wallet', 'cached_pow')
     if cached_work == '' or type == 'open':
         #Generate work for block
         pow_source = parser.get('wallet', 'pow_source')
+        if running_pow_gen == True:
+            messagebox.showinfo('Generating PoW', 'The wallet is still generating PoW, please wait until it is complete. This should not take long.')
         if pow_source == 'external':
             data = json.dumps({'action' : 'work_generate', 'hash' : hash})
             ws.send(data)
             block_work = json.loads(str(ws.recv()))
             work = block_work['work']
         else:
-            response = urwid.Text([u'Running Internal PoW\nThis might take some time...'])
-            done = urwid.Button(u'Back')
-            urwid.connect_signal(done, 'click', return_to_main)
-            main.original_widget = urwid.Filler(urwid.Pile([response,
-                urwid.AttrMap(done, None, focus_map='reversed')]))
+            
+            running_pow_gen = True
             pow_work = pow_generate(hash)
             work = str(pow_work, 'ascii')
+            running_pow_gen = False
 
         return work
             
@@ -156,8 +185,6 @@ def pow_threshold(check):
 
 def pow_generate(hash):
     hash_bytes = bytearray.fromhex(hash)
-    #print(hash_bytes.hex())
-    #time.sleep(5)
     test = False
     inc = 0
     while test == False:
@@ -266,11 +293,11 @@ def send_xrb(dest_address, final_balance):
     #print(block_reply)
     return block_reply
 
-def receive_xrb(_loop, _data):
+def receive_xrb():
+    time.sleep(10)
     pending = get_pending()
 
     if len(pending) > 0:
-
         data = json.dumps({'action' : 'account_info', 'account' : account})
         ws.send(data)
         info =  ws.recv()
@@ -307,15 +334,12 @@ def receive_xrb(_loop, _data):
             save_config('balance', str(get_balance(account)))
             #print(block_reply)
     else:
-    #Lets cache a PoW for later
         if parser.get('wallet', 'cached_pow') == '' and parser.get('wallet', 'open') == '1':
             previous = get_previous()
             work = get_pow(previous, 'cache')
             save_config('cached_pow', work)
             logging.info("Cached PoW Block")
-
-
-    main_loop.set_alarm_in(60, receive_xrb)
+    time.sleep(50)
 
 def open_xrb():
     representative = parser.get('wallet', 'representative')
@@ -387,112 +411,79 @@ def change_xrb():
     logging.info(block_reply)
 #print(block_reply)
 
-def menu(title, choices):
-    body = [urwid.Text(title), urwid.Divider()]
-    address_txt = urwid.Text(account)
-    body.append(urwid.AttrMap(address_txt, None, focus_map='reversed'))
-
-
-    xrb_balance = 'Balance: ' + parser.get('wallet', 'balance')  + ' Mxrb'
-    balance_txt = urwid.Text(xrb_balance)
-    body.append(urwid.AttrMap(balance_txt, None, focus_map='reversed'))
-
-    paragraph_txt = urwid.Text('\n')
-    body.append(urwid.AttrMap(paragraph_txt, None, focus_map='reversed'))
-
-    for c in choices:
-        button = urwid.Button(c)
-        urwid.connect_signal(button, 'click', item_chosen, c)
-        body.append(urwid.AttrMap(button, None, focus_map='reversed'))
-    return urwid.ListBox(urwid.SimpleFocusListWalker(body))
-
-def item_chosen(button, choice):
+def item_chosen(choice):
 
     if choice == 'Refresh':
+        global saved_balance
         save_config('balance', str(get_balance(account)))
-        main.original_widget = urwid.Padding(menu(u'RetroXRBWallet', choices),
-                                             left=2, right=2)
+        saved_balance = str(get_balance(account))
+        balance_text.set(('Balance: {} Mxrb').format(int(saved_balance)))
+        root.update_idletasks()
 
     elif choice == 'Send':
-       response = urwid.Text([u'Balance: ', parser.get('wallet', 'balance'), u'Mxrb\n'])
-       xrb_edit = urwid.Edit(u"Destination Address?\n")
-       amount_edit = urwid.Edit(u"Amount in Mxrb?\n")
-       send = urwid.Button(u'Send')
-       done = urwid.Button(u'Back')
-       urwid.connect_signal(send, 'click', confirm_send,
-               user_args=[xrb_edit, amount_edit])
-       urwid.connect_signal(done, 'click', return_to_main)
-       main.original_widget = urwid.Filler(urwid.Pile([response,
-            urwid.AttrMap(xrb_edit, None, focus_map='reversed'),
-            urwid.AttrMap(amount_edit, None, focus_map='reversed'),
-            urwid.AttrMap(send, None, focus_map='reversed'),
-            urwid.AttrMap(done, None, focus_map='reversed')]))
+        global top
+        top = Toplevel()
+        var = IntVar()
+        top.grab_set()
+        top.wm_iconbitmap('logo.ico')
+        top.title('Send')
+        addr = Label(top, text="Destination Address").grid(row=0)
+        amount = Label(top, text="Amount in Mxrb").grid(row=1)
+        e1 = Entry(top,width=80)
+        e2 = Entry(top,width=80)
+        e1.grid(row=0, column=1)
+        e2.grid(row=1, column=1)
+        save=Button(top, text="Send", command=lambda: confirm_send(e1.get(), e2.get()),width=5,pady=5).grid(row=2, column=0)
+        back=Button(top, text="Back", command=lambda: top.destroy(),width=5,pady=5).grid(row=2, column=1)
+        top.mainloop()
+
 
     elif choice == 'Configure PoW':
         pow_source = parser.get('wallet', 'pow_source')
-        response = urwid.Text([u'Configure PoW Source\n'])
-        if pow_source == 'external':
-            #response = urwid.Text([u'external\n'])
-            external_pow = urwid.CheckBox(u'External PoW', state=True)
-            internal_pow = urwid.CheckBox(u'Internal PoW', state=False)
-        else:
-            #response = urwid.Text([u'internal\n'])
-            external_pow = urwid.CheckBox(u'External PoW', state=False)
-            internal_pow = urwid.CheckBox(u'Internal PoW', state=True)
-        save = urwid.Button(u'Save')
-        done = urwid.Button(u'Back')
-        urwid.connect_signal(done, 'click', return_to_main)
-        urwid.connect_signal(save, 'click', change_pow, user_args=[internal_pow, external_pow])
-        main.original_widget = urwid.Filler(urwid.Pile([response,
-            urwid.AttrMap(internal_pow, None, focus_map='reversed'),
-            urwid.AttrMap(external_pow, None, focus_map='reversed'),
-            urwid.AttrMap(save, None, focus_map='reversed'),
-            urwid.AttrMap(done, None, focus_map='reversed')]))
-
+        top = Toplevel()
+        var = IntVar()
+        top.grab_set()
+        top.wm_iconbitmap('logo.ico')
+        top.title('Configure PoW Source')
+        rb1 = Radiobutton(top, text = 'Internal PoW', variable = var,value = 1)
+        rb2 =Radiobutton(top, text = 'External PoW', variable = var,value = 2)
+        save=Button(top, text="Save", command=lambda: change_pow(var.get()),width=5,pady=5)
+        back=Button(top, text="Back", command=lambda: top.destroy(),width=5,pady=5)
+        if pow_source == 'internal':
+            var.set(1)
+        elif pow_source == 'external':
+            var.set(2)
+        rb1.pack()
+        rb2.pack()
+        save.pack()
+        back.pack()
+        top.mainloop()
     elif choice == 'Configure Rep':
         representative = parser.get('wallet', 'representative')
-        response = urwid.Text([u'Configure Representative\n'])
-        xrb_rep = urwid.Edit(u"Representative:\n", edit_text=representative)
-        save = urwid.Button(u'Save')
-        done = urwid.Button(u'Back')
-        urwid.connect_signal(done, 'click', return_to_main)
-        urwid.connect_signal(save, 'click', update_rep, user_args=[xrb_rep])
-        main.original_widget = urwid.Filler(urwid.Pile([response,
-            urwid.AttrMap(xrb_rep, None, focus_map='reversed'),
-            urwid.AttrMap(save, None, focus_map='reversed'),
-            urwid.AttrMap(done, None, focus_map='reversed')]))
+        xrb_rep = simpledialog.askstring('Configure Representative', 'Representative:', initialvalue=representative)
+        if xrb_rep != None:
+            update_rep(xrb_rep)
+
 
     elif choice == 'Configure Server':
         node_server = parser.get('wallet', 'server')
-        response = urwid.Text([u'Configure Server\n'])
-        xrb_server = urwid.Edit(u"Server:\n", edit_text=node_server)
-        save = urwid.Button(u'Save and Restart')
-        done = urwid.Button(u'Back')
-        urwid.connect_signal(done, 'click', return_to_main)
-        urwid.connect_signal(save, 'click', update_server, user_args=[xrb_server])
-        main.original_widget = urwid.Filler(urwid.Pile([response,
-            urwid.AttrMap(xrb_server, None, focus_map='reversed'),
-            urwid.AttrMap(save, None, focus_map='reversed'),
-            urwid.AttrMap(done, None, focus_map='reversed')]))
+        xrb_server = simpledialog.askstring('Configure Server', 'Server:', initialvalue=node_server)
+        if xrb_server != None:
+            update_server(xrb_server)
 
     elif choice == 'Display QR Code':
         data = 'xrb:' + account
         xrb_qr = pyqrcode.create(data, error='L', version=4, mode=None, encoding='iso-8859-1')
-        list = []
-        for blocks in xrb_qr.text():
-            if blocks == '1':
-                list.append(u"\u2588")
-                list.append(u"\u2588")
-            elif blocks == '0':
-                list.append(chr(32))
-                list.append(chr(32))
-            else:
-                list.append('\n')
-        response = urwid.Text(list)
-        done = urwid.Button(u'Back')
-        urwid.connect_signal(done, 'click', return_to_main)
-        main.original_widget = urwid.Filler(urwid.Pile([response,
-            urwid.AttrMap(done, None)]))
+        xrb_qr_xbm = xrb_qr.xbm(scale=10)
+        top = Toplevel()
+        top.grab_set()
+        code_bmp = BitmapImage(data=xrb_qr_xbm)
+        code_bmp.config(background="white")
+        label = Label(top,image=code_bmp)
+        label.pack()
+        back=Button(top, text="Back", command=lambda: top.destroy(),width=5,pady=5)
+        back.pack()
+        top.mainloop()
 
     elif choice == 'Account History':
         data = json.dumps({ "action": "account_block_count", "account": account })
@@ -502,7 +493,12 @@ def item_chosen(button, choice):
         if 'error' in rx_data:
             account_block_count = '0'
             history_title = 'Account History (' + account_block_count + ')'
-            body = [urwid.Text(history_title), urwid.Divider()]
+            top = Toplevel()
+            top.title(history_title)
+            master = Tkinter.Frame(top)
+            master.pack()
+            tree = ttk.Treeview(master, columns=['Transaction Type','Account','Amount'])
+            tree.pack()
         else:
             account_block_count = rx_data['block_count']
             data = json.dumps({'action' : 'account_history', 'account' : account, 'count': int(account_block_count)})
@@ -511,135 +507,95 @@ def item_chosen(button, choice):
             rx_data = json.loads(str(history_blocks))
             
             history_title = 'Account History (' + account_block_count + ')'
-            body = [urwid.Text(history_title), urwid.Divider()]
+            top = Toplevel()
+            top.title(history_title)
+            master = tkinter.Frame(top)
+            master.pack()
+            tree = ttk.Treeview(master, columns=['Transaction Type','Account','Amount'])
+            tree.heading('Transaction Type', text='Transaction Type')
+            tree.heading('Account', text='Account')
+            tree.heading('Amount', text='Amount')
+            tree.pack()
             rx_data['history'].reverse()
+            tree['show'] = 'headings'
+            for i in range (len(rx_data['history'])):
+                tree.insert("",index=0,text=str(len(rx_data['history'])-i),values=[rx_data['history'][i]['type'],rx_data['history'][i]['account'],(float(rx_data['history'][i]['amount'])/10**30)])
             
-            first_done = urwid.Button(u'Back')
-            urwid.connect_signal(first_done, 'click', return_to_main)
-            body.append(urwid.AttrMap(first_done, None, focus_map='reversed'))
             
-            count = 0
-            for blocks in rx_data['history']:
-                count = count + 1
-                #print(blocks['amount'])
-                #str(float(blocks['amount']) / raw_in_xrb)
-                ind_history = str(count) + ') ' + blocks['type'] + ' ' + str(float(blocks['amount']) / raw_in_xrb) + 'Mxrb ' + blocks['account'] + '\n'
-                address_txt = urwid.Text(ind_history)
-                body.append(urwid.AttrMap(address_txt, None, focus_map='reversed'))
+            
 
-        done = urwid.Button(u'Back')
-        urwid.connect_signal(done, 'click', return_to_main)
-        body.append(urwid.AttrMap(done, None, focus_map='reversed'))
-        main.original_widget = urwid.ListBox(urwid.SimpleListWalker(body))
-
-
-    elif choice == 'Quit':
-       response = urwid.Text([u'Are You Sure?\n'])
-       yes = urwid.Button(u'Yes')
-       no = urwid.Button(u'No')
-       urwid.connect_signal(yes, 'click', exit_program)
-       urwid.connect_signal(no, 'click', return_to_main)
-       main.original_widget = urwid.Filler(urwid.Pile([response,
-            urwid.AttrMap(yes, None, focus_map='reversed'),
-            urwid.AttrMap(no, None, focus_map='reversed')]))
-
-def update_rep(xrb_rep, button):
-    new_rep = xrb_rep.edit_text
+def update_rep(xrb_rep):
+    new_rep = xrb_rep
     if len(new_rep) != 64 or new_rep[:4] != "xrb_":
-        print('Error')
+        messagebox.showerror('Error', 'That is not a valid RaiBlocks address.')
     else:
         save_config('representative', new_rep)
         #Send change block
         change_xrb()
-        main.original_widget = urwid.Padding(menu(u'RetroXRBWallet', choices),
-                                             left=2, right=2)
 
-def update_server(xrb_server, button):
-    new_server = xrb_server.edit_text
-    save_config('server', new_server)
+def update_server(xrb_server):
+    save_config('server', xrb_server)
     ws.close()
-    raise urwid.ExitMainLoop()
+    simpledialog.messagebox.showinfo('Restart', 'The program requires a restart.')
+    root.destroy()
+
+def restart():
+    """Restarts the current program.
+    Note: this function does not return. Any cleanup action (like
+    saving data) must be done before calling this function."""
+    python = sys.executable
+    os.execl(python, python, * sys.argv)
 
 
-def change_pow(internal_pow, external_pow, button):
-    #print(external_pow.get_state())
-    if external_pow.get_state() == True:
-        save_config('pow_source', 'external')
-        pow_source = 'external'
-        #print('external')
-    else:
-        print('internal')
+def change_pow(response):
+    if response == 1:
         save_config('pow_source', 'internal')
         pow_source = 'internal'
+    elif response == 2:
+        save_config('pow_source', 'external')
+        pow_source = 'external'
+    top.destroy()
 
-    #print(pow_source)
-    main.original_widget = urwid.Padding(menu(u'RetroXRBWallet', choices),
-                left=2, right=2)
 
-
-def confirm_send(final_address, xrb_amount, button):
+def confirm_send(final_address, xrb_amount):
     #Lets check the details here
     #Calculate amount to send
     #send_amount is in Mxrb,
-    send_amount = xrb_amount.edit_text
-    send_address = final_address.edit_text
-    try:
-        rai_send = float(send_amount) * 1000000 #float of total send
-        raw_send = str(int(rai_send)) + '000000000000000000000000'
-        #Create the new balance
-        int_balance = int(get_raw_balance(account))
-        new_balance = int_balance - int(raw_send)
-        #print(new_balance)
+    send_amount = xrb_amount
+    send_address = final_address
+    rai_send = float(send_amount) * 1000000 #float of total send
+    raw_send = str(int(rai_send)) + '000000000000000000000000'
+    #Create the new balance
+    int_balance = int(get_raw_balance(account))
+    new_balance = int_balance - int(raw_send)
+    #print(new_balance)
 
-        if len(send_address) != 64 or send_address[:4] != "xrb_":
-            response = urwid.Text([u'Error, incorrect address\n'])
-            back = urwid.Button(u'Back')
-            urwid.connect_signal(back, 'click', return_to_main)
-            main.original_widget = urwid.Filler(urwid.Pile([response,
-                urwid.AttrMap(back, None, focus_map='reversed')]))
-
-        else:
-            response = urwid.Text([u'Sending...\n',
-                    u'Dest ', str(final_address.edit_text),
-                    u'\nAmount      ', str(raw_send),
-                    u'\nNew Balance ', str(new_balance),
-                    u'\nAre You Sure?'])
-            yes = urwid.Button(u'Yes')
-            no = urwid.Button(u'No')
-            urwid.connect_signal(yes, 'click', process_send,
-                    user_args=[final_address, new_balance])
-            urwid.connect_signal(no, 'click', return_to_main)
-            main.original_widget = urwid.Filler(urwid.Pile([response,
-                    urwid.AttrMap(yes, None, focus_map='reversed'),
-                    urwid.AttrMap(no, None, focus_map='reversed')]))
-    except:
-        response = urwid.Text([u'Error, incorrect amount\n'])
-        back = urwid.Button(u'Back')
-        urwid.connect_signal(back, 'click', return_to_main)
-        main.original_widget = urwid.Filler(urwid.Pile([response,
-            urwid.AttrMap(back, None, focus_map='reversed')]))
+    if len(send_address) != 64 or send_address[:4] != "xrb_":
+        messagebox.showerror('Error', 'Invalid Address')
+        top.destroy()
+    elif type(xrb_amount) is int: 
+        if not xrb_amount <= int_balance:
+            messagebox.showerror('Error', 'Invalid Amount')
+            top.destroy()
 
 
-def process_send(final_address, final_balance, button):
-    outcome = send_xrb(str(final_address.edit_text), final_balance)
-    if len(outcome) == 4:
-        response = urwid.Text([u'Success'])
-        save_config('balance', str(get_balance(account)))
     else:
-       response = urwid.Text([u'Failed'])
+        if messagebox.askyesno('Sending', ('Dest: {}\n Amount: {} Mxrb\n New Balance: {} Mxrb\n Are You Sure?').format(send_address,send_amount,new_balance)) == True:
+            process_send(send_address, int(rai_send))
 
-    done = urwid.Button(u'Ok')
-    urwid.connect_signal(done, 'click', return_to_main)
-    main.original_widget = urwid.Filler(urwid.Pile([response,
-            urwid.AttrMap(done, None, focus_map='reversed')]))
 
-def return_to_main(button):
-    main.original_widget = urwid.Padding(menu(u'RetroXRBWallet', choices),
-            left=2, right=2)
+def process_send(final_address, final_balance):
+    outcome = send_xrb(str(final_address), final_balance)
+    if len(outcome) == 4:
+        messagebox.showinfo('Sent', 'Transaction Successfully Sent')
+        save_config('balance', str(get_balance(account)))
+        top.destroy()
+    else:
+       messagebox.showerror('Failed', 'Transaction Failed')
+       top.destroy()
 
-def exit_program(button):
-    ws.close()
-    raise urwid.ExitMainLoop()
+        
+
 
 def read_encrypted(password, filename, string=True):
     with open(filename, 'rb') as input:
@@ -659,28 +615,27 @@ parser = SafeConfigParser()
 config_files = parser.read('config.ini')
 
 while True:
-    password = getpass.getpass('Enter password: ')
-    password_confirm = getpass.getpass('Confirm password: ')
+    password = simpledialog.askstring("Password", "Enter password:", show='*')
+    password_confirm = simpledialog.askstring("Password", "Confirm password:", show='*')
     if password == password_confirm:
         break
-    print("Password Mismatch!")
+    messagebox.showerror('Error', 'Password Mismatch')
 
 if len(config_files) == 0:
-    print("Generating Wallet Seed")
     full_wallet_seed = hex(random.SystemRandom().getrandbits(256))
     wallet_seed = full_wallet_seed[2:].upper()
-    print("Wallet Seed (make a copy of this in a safe place!): ", wallet_seed)
     write_encrypted(password, 'seed.txt', wallet_seed)
 
     cfgfile = open("config.ini",'w')
     parser.add_section('wallet')
     priv_key, pub_key = seed_account(str(wallet_seed), 0)
     public_key = str(binascii.hexlify(pub_key), 'ascii')
-    print("Public Key: ", str(public_key))
 
     account = account_xrb(str(public_key))
-    print("Account Address: ", account)
-
+    keys = open('data.txt', 'w')
+    keys.write(('Wallet Seed: {}\nPublic Key: {}\n Account Address: {}\n').format(wallet_seed, public_key, account))
+    keys.write('\n Store the data in a safe place (for example on paper) and DELETE THIS FILE!')
+    messagebox.showinfo('Seed and Address written to "data.txt", store the data in a safe place and delete this file')
     parser.set('wallet', 'account', account)
     parser.set('wallet', 'index', '0')
     parser.set('wallet', 'representative', default_representative)
@@ -696,12 +651,10 @@ if len(config_files) == 0:
     index = 0
     seed = wallet_seed
 else:
-    print("Config file found")
-    print("Decoding wallet seed with your password")
     try:
         seed = read_encrypted(password, 'seed.txt', string=True)
     except:
-        print('\nError decoding seed, check password and try again')
+        messagebox.showerror('Error', 'Error decoding seed, check password and try again')
         sys.exit()
 
 account = parser.get('wallet', 'account')
@@ -716,15 +669,40 @@ account_open = parser.get('wallet', 'open')
 try:
     ws = create_connection(node_server)
 except:
-    print('\nError - unable to connect to backend server\nTry again later or change the server in config.ini')
+    messagebox.showerror('Error', ' to connect to backend server\nTry again later or change the server in config.ini')
     sys.exit()
 
-main = urwid.Padding(menu(u'RetroXRBWallet', choices), left=2, right=2)
-top = urwid.Overlay(main, urwid.SolidFill(u'\N{MEDIUM SHADE}'),
-        align='center', width=('relative', 90),
-        valign='middle', height=('relative', 80),
-        min_width=20, min_height=9)
 
-main_loop = urwid.MainLoop(top, palette=[('reversed', 'standout', '')])
-main_loop.set_alarm_in(10, receive_xrb)
-main_loop.run()
+thread = threading.Thread(target=receive_xrb)
+thread.start()
+root.deiconify()
+balance_text = StringVar()
+balance_text.set(('Balance: {} Mxrb').format(int(saved_balance)))
+l_title = Label(root, text="RetroXRBWallet")
+l_address = Text(root,height=1, width=65)
+l_address.insert(1.0, account)
+l_address.bind('<Double-Button-1>',address_to_clipboard)
+l_balance = Label(root, textvariable=balance_text)
+l_title.pack()
+l_address.pack()
+l_balance.pack()
+
+b_send=Button(root, text="Send", command=lambda:item_chosen('Send'),width=25,pady=7)
+b_history=Button(root, text="Account History", command=lambda:item_chosen('Account History'),width=25,pady=7)
+b_qr=Button(root, text="Display QR Code", command=lambda:item_chosen('Display QR Code'),width=25,pady=7)
+b_pow=Button(root, text="Configure PoW", command=lambda:item_chosen('Configure PoW'),width=25,pady=7)
+b_rep=Button(root, text="Configure Rep", command=lambda:item_chosen('Configure Rep'),width=25,pady=7)
+b_server=Button(root, text="Configure Server", command=lambda:item_chosen('Configure Server'),width=25,pady=7)
+b_refresh=Button(root, text="Refresh", command=lambda:item_chosen('Refresh'),width=25,pady=7)
+b_quit=Button(root, text="Quit", command=root_destroy,width=25,pady=7)
+
+
+
+
+for c in sorted(root.children):
+    root.children[c].pack()
+
+l_address.configure(state="disabled",exportselection=1)
+
+root.mainloop()
+
