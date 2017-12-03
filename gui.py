@@ -2,9 +2,6 @@
 #Previous - could reduce server involvement by storing previous hash, requesting server on boot + updating with each transaction
 #Convert PoW to cpython or even a c binary that could be dropped in to increase speed (would also benefit from multicore support)
 #Increase timeout on server
-datas=[('C:\\Python27\\tcl\\tcl8.5', 'lib\\tcl8.5'),
-             ('C:\\Python27\\tcl\\tk8.5', 'lib\\tk8.5')]
-
 
 from pyblake2 import blake2b
 import time
@@ -12,9 +9,9 @@ import threading
 import tkinter
 import websocket
 import json
-import sys, os
+import sys
+import os
 from websocket import create_connection
-import ssl
 import websocket
 from tkinter import *
 import tkinter.simpledialog as simpledialog
