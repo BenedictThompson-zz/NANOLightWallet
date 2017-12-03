@@ -1,4 +1,4 @@
-# RetroXRBWallet
+# XRB Lite Wallet
 
 **Warning this is super beta test, your wallet seed is encoded with a password in seed.txt, it and your private keys are not passed to the server**
 
