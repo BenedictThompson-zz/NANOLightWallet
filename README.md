@@ -1,5 +1,5 @@
 # XRB Light Wallet
-![Image of Wallet](https://i.imgur.com/zDJwl1j.png)
+![Image of Wallet](https://i.imgur.com/YAt6k45.png)
 
 **Warning this is super beta test, your wallet seed is encoded with a password in seed.txt, it and your private keys are not passed to the server**
 
