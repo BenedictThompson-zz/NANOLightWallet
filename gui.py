@@ -635,7 +635,7 @@ if len(config_files) == 0:
     keys = open('data.txt', 'w')
     keys.write(('Wallet Seed: {}\nPublic Key: {}\n Account Address: {}\n').format(wallet_seed, public_key, account))
     keys.write('\n Store the data in a safe place (for example on paper) and DELETE THIS FILE!')
-    messagebox.showinfo('Seed and Address written to "data.txt", store the data in a safe place and delete this file')
+    messagebox.showinfo('Info','Seed and Address written to "data.txt", store the data in a safe place and delete this file')
     parser.set('wallet', 'account', account)
     parser.set('wallet', 'index', '0')
     parser.set('wallet', 'representative', default_representative)
