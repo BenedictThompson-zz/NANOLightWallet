@@ -17,6 +17,13 @@ from tkinter import *
 import tkinter.simpledialog as simpledialog
 import tkinter.messagebox as messagebox
 from tkinter import ttk
+import base64
+icon = "AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAACkuAAApLgAAAAAAAAAAAAAAAAAAAAAAAEm3SQBJt0kASbdJAEm3SQFFuEpBX7FBv72ZIL/WkhhB0pMZAdKTGQDSkxkA0pMZAAAAAAAAAAAASbdJAEm3SQBJt0kASbdJAEm3SSJJt0mKSLdJ6FqzQ//Clx//05MZ6NKTGYrSkxki0pMZANKTGQDSkxkA0pMZAD3HhABGulUASbdJEUm3SWtJt0nXSbdJ/0i3Sf9as0P+wpcf/tOTGf/Skxn/0pMZ2NKTGWvSkxkR0pMZANKTGQAz07ADR7lQSUm3R79Jt0n9SbdJ/0m3Sf9It0n/WrND/sKXH/7Tkxn/0pMZ/9KTGf/Skxn90pMZv9KTGUnSkxkDMda6FjnMlc5Dv2b/SbdK/0m3SP9Jt0n/R7dJ/1iyQf7Clxz+05MY/9KTGf/Skxn/0pMZ/9KTGf/SkxnP0pMZFjHWvBkx1r3UM9Sz/zvJi/5FvFr+SLdI/1C5UP+FwXv9y6te/dKWIv/Skxj/0pMZ/9KTGf/Skxn/0pMZ1NKTGRkw1rwZMNa81DDWvf8w173/MtKs/lbJi/2z0bH919jV/tHNyv7QvJf+0Zsz/tKSF//Skxn/0pMZ/9KTGdTSkxkZPdKsGT3SrNM90qz/PdKt/jrSrP512sH85+fm/d/d3PzS0c/90c/N/tOpU/3UlRf+1JYa/tSWGv/UlhrT1JYaGY22TxmMtk/TjLZP/4y2T/6Ltk3+p8R9/Nva2f3W1NP85uXk/OPh3/3ivFr85Ksa/uSsHv7krR7/5K0e0+StHhmasj8ZmrI/1JqyP/+asj//mas7/qOgS/29tZr9zcvH/u3s6f7x5sn97sdh/ei0KP7msB7/5rAf/+awH9TmsB8ZmbJAGZmzQNSZrz//mZ44/pqKL/6agiv/nIYz/7Oja/3s1Jf99dBz//XObP/zyWD+7L1A/ueyJP/msB7U5rAeGZmyQBaZozrOmo8x/5qDLP+agyz/moMs/5mCK/+kizL+6sVj/vbObP/1zmz/9c5t//XOa//xxln/67o4zuawIBaZrz8DmoYtSZqCLL+agyz9moMs/5qDLP+Zgiz/pYw0/urFZP72z2z/9c5s//XObP/1zmz99c5tv/TMZ0nosycDmZw3AJqILgCagywRmoMsa5qDLNeagyz/mYIs/6WMNP7qxWT+9s9s//XObP/1zmzY9c5sa/XObBHzy2QA7b9EAJqDLACagywAmoMsAJqDLACagywimoMsipmCK+iljDT/6sVk//bPbej1zmyK9c5sIvXObAD1zmwA9c5sAPXObAAAAAAAAAAAAJqDLACagywAmoMsAJqDLAGXgSpBqI82v+fCYr/40G5B9c5sAfXObAD1zmwA9c5sAAAAAAAAAAAAwAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAMAAA=="
+icondata= base64.b64decode(icon)
+tempFile= "logo.ico"
+iconfile= open(tempFile,"wb")
+iconfile.write(icondata)
+iconfile.close()
 root=Tk()
 root.withdraw()
 
@@ -643,6 +650,7 @@ if len(config_files) == 0:
         f.write(('Wallet Seed: {}\nPublic Key: {}\nAccount Address: {}\n').format(wallet_seed, public_key, account))
         f.write('\nStore the data in a safe place (for example on paper) and DELETE THIS FILE!')
         f.close()
+
     messagebox.showinfo('Info','Seed and Address written to "data.txt", ensure that you store your data in a safe place and delete this file.')
     parser.set('wallet', 'account', account)
     parser.set('wallet', 'index', '0')
