@@ -1,9 +1,9 @@
-# XRB Light Wallet
+# NANO Light Wallet
 ![Image of Wallet](https://i.imgur.com/YAt6k45.png)
 
 **Warning this is super beta test, your wallet seed is encoded with a password in seed.txt, it and your private keys are not passed to the server**
 
-### Download Windows Build [Here](https://github.com/BenedictThompson/XRBLightWallet/releases)
+### Download Windows Build [Here](https://github.com/BenedictThompson/NANOLightWallet/releases)
 
 ## Installation
 
